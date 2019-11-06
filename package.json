@@ -1,0 +1,16 @@
+{
+  "name": "flex",
+  "version": "1.0.0",
+  "description": "Flexible RPC (remote procedural call) library with a plugin system for protocols.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "flex",
+    "partial",
+    "frame"
+  ],
+  "author": "Levi Roberts",
+  "license": "MIT"
+}
