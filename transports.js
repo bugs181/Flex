@@ -27,14 +27,15 @@ function transportsListen() {
     if (!transport.initialized)
       loadTransport.call(this, transportName)
 
+    if (transport.listening)
+      continue
+
     console.log(`Transport '${transportName}' listen: ${config.port}`)
     transport.instance.listen(config)
     initEvents.call(this, transport)
 
-    // TODO: move this into initEvents(transport)
+    transport.listening = true
   }
-
-  this.listening = true
 }
 
 async function transportsConnect() {
@@ -45,25 +46,22 @@ async function transportsConnect() {
     if (!transport.initialized)
       loadTransport.call(this, transportName)
 
-    // TODO: Error checking
     console.log(`Transport '${transportName}' connect: ${config.host}:${config.port}`)
 
-    // FIXME: Use the promise instead of doing callback here.
     initEvents.call(this, transport)
 
-    await transport.instance.connect(config, () => {
-      // FIXME: Each transport needs it's own connection status.
-      this.connected = true
-      // transport.connected = true
+    // TODO: Error checking - try {} catch
+    await transport.instance.connect(config)
+    this.connected = true // FIXME: Each transport needs it's own connection status.
+    // transport.connected = true
 
-      this.Client.onConnect.call(this)
-    })
-
+    this.Request.onConnect.call(this)
   }
 }
 
 async function transportsSend(message) {
   // Loop through transports and send a message.
+  // TODO: try {} catch
   for (const transportName of Object.keys(this.transport)) {
     const transport = this.transport[transportName]
     await transport.instance.send(message)
@@ -72,16 +70,17 @@ async function transportsSend(message) {
 
 function initEvents(transport) {
   transport.instance.on('rpcRequest', (msg) => {
-    const fnResult = this.Server.flexServerRequest.call(this, msg.data)
+    const fnResult = this.Responder.flexRequest.call(this, msg.data)
     transport.instance.send({ event: 'rpcAnswer', data: fnResult })
   })
 
   transport.instance.on('rpcAnswer', (msg) => {
     const rpcAnswer = msg.data
-    this.Client.flexClientResponse(this, rpcAnswer)
+    this.Request.flexClientResponse(this, rpcAnswer)
   })
 
   transport.instance.on('rpcAnswerCallback', (msg) => {
-
+    const rpcAnswer = msg.data
+    this.Request.flexClientCallback.call(this, rpcAnswer)
   })
 }

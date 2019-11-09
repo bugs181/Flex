@@ -1,13 +1,13 @@
 'use strict'
 
-// TODO: Rename: answer.js
+const Transports = require('./transports')
 
 module.exports = {
-  addRPCFunction: addRPCFunction,
-  flexServerRequest: flexServerRequest,
+  addRemoteFunction: addRemoteFunction,
+  flexRequest: flexRequest,
 }
 
-function addRPCFunction(fn, fnName) {
+function addRemoteFunction(fn, fnName) {
   // Allow first or second param to be the string for the name over-ride.
   if (typeof fn === 'string') {
     const arg1 = fn, arg2 = fnName
@@ -15,7 +15,7 @@ function addRPCFunction(fn, fnName) {
     fnName = arg1
   }
 
-  // If an array of functions was given
+  // If an array of functions are given
   if (typeof fn === 'object' && Array.isArray(fn)) {
     const fnList = fn
     for (let fn of fnList) {
@@ -25,9 +25,9 @@ function addRPCFunction(fn, fnName) {
         [() => {}, 'something2'],
       ]) */
       if (typeof fn === 'object' && Array.isArray(fn) && fn.length > 1)
-        addRPCFunction.call(this, fn[0], fn[1])
+        addRemoteFunction.call(this, fn[0], fn[1])
       else
-        addRPCFunction.call(this, fn)
+        addRemoteFunction.call(this, fn)
     }
 
     return
@@ -48,7 +48,7 @@ function addRPCFunction(fn, fnName) {
   this.functions[fnName] = fn
 }
 
-function flexServerRequest(rpcRequest) {
+function flexRequest(rpcRequest) {
   console.log('Incomming rpcRequest:', rpcRequest)
 
   // Now we do the inverse and call the function on the server side.
@@ -68,13 +68,12 @@ function flexServerRequest(rpcRequest) {
     // Merge the rpcRequest args and callback params in the correct order.
     const fnParams = rpcRequest.args
     for (let param of rpcRequest.callbacks) {
-      // TODO: Wrap callback functions. (May cause problems with non-streaming architectures)
-      //const cbFunction = wrapFunction(param.fn)
-      fnParams.splice(param.index, 1, param.fn)
+      // Wrap callback functions. (May cause problems with non-streaming architectures)
+      const cbFunction = proxyCallbackFunction(rpcRequest, param.index)
+      fnParams.splice(param.index, 1, cbFunction)
     }
 
     rpcAnswer.result = fn.apply(null, rpcRequest.args)
-    // rpcAnswer.result = 'pending'
   } catch (err) {
     rpcAnswer.error = err.message
   }
@@ -85,6 +84,19 @@ function flexServerRequest(rpcRequest) {
   return rpcAnswer
 }
 
-function flexServerResponse() {
+function proxyCallbackFunction(rpcRequest, cid) {
+  return function proxiedCallback() {
+    const message = {
+      event: 'rpcAnswerCallback',
+      data: {
+        id: rpcRequest.id,
+        req: rpcRequest.req,
+        args: arguments,
+        cid: cid,
+        status: 'pending',
+      }
+    }
 
+    Transports.send(message)
+  }
 }

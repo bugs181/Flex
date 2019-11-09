@@ -1,17 +1,15 @@
 'use strict'
 
-const Server = require('./server')
-const Client = require('./client')
+const Responder = require('./response')
+const Request = require('./request')
 const Transports = require('./transports')
 
 //export default class Flex {
 module.exports = class Flex {
-  constructor() {
+  constructor(transport, config) {
     // Server
-    this.isServer = false
-    this.listening = false
-    this.connected = false
-    this.expectedReturnTypes = true
+    this.connected = false // FIXME: Move to transports, store state inside transport object.
+    this.keepAlive = false // This feature will allow callbacks to be run more than once. Caution: Uses more memory and should be used with this.done() function.
 
     // Shared
     this.transportCount = 1
@@ -33,20 +31,26 @@ module.exports = class Flex {
     this.requests = []
 
     // FIXME: Remove after testing
-    this.Server = Server
-    this.Client = Client
+    this.Responder = Responder
+    this.Request = Request
+
+    Transports.send = Transports.send.bind(this)
+
+    if (transport && config)
+      this.use.call(this, transport, config)
 
     return new Proxy(this, flexProxy)
   }
 
-  use(transport, address) {
+  use(transport, config) {
     // Delete default Socket transport
     delete this.transport.Socket
 
     this.transport[transport] = {
       config: {
-        host: 'localhost',
-        port: 8082,
+        host: config && config.host || 'localhost',
+        port: config && config.port || 8082,
+        ...config,
       },
 
       initialized: false,
@@ -64,7 +68,6 @@ module.exports = class Flex {
     if (port && this.transportCount === 1)
       this.transport.Socket.config.port = port
 
-    this.isServer = true
     Transports.listen.call(this)
   }
 
@@ -78,25 +81,19 @@ module.exports = class Flex {
     if (address && this.transportCount === 1)
       this.transport.Socket.config.host = address // TODO: Resolve address into host and port
 
-    this.isServer = false // FIXME: Allow flex to be both a client and a server instance. For example, proxying public requests to alt Flex transports.
     this.connected = false // FIXME: Each transport needs it's own connection status.
     Transports.connect.call(this)
   }
 
   add(fn, fnName) {
     console.log('add(fn)')
-    if (!this.listening)
-      this.listen()
-
-    Server.addRPCFunction.call(this, fn, fnName)
+    Responder.addRemoteFunction.call(this, fn, fnName)
   }
 }
 
 
 const flexProxy = {
   get(flex, prop) {
-    return prop in flex ? flex[prop] : Client.flexClientRequest(flex, prop, flexProxy) // Client.flexClientRequest(flex, prop)
+    return prop in flex ? flex[prop] : Request.flexRequest(flex, prop, flexProxy) // Client.flexClientRequest(flex, prop)
   }
 }
-
-// TODO: FIXME: Store transport config outside of object so that it cant be messed with.

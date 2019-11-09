@@ -29,3 +29,6 @@ module.exports = class Koa {
     //onEvent.apply(this, arguments)
   }
 }
+
+// TODO: Use SSE (server sent events)
+// https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events

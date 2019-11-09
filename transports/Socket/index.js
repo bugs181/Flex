@@ -18,44 +18,11 @@ module.exports = class Socket {
   }
 
   listen() {
-    serverSocketListen.apply(this, arguments)
+    return serverSocketListen.apply(this, arguments)
   }
 
-  connect(config, connected) {
-    return new Promise((resolve, reject) => {
-      console.log('Socket connecting on port:', config.port)
-
-      const WebSocket = require('ws') // TODO: this.WS
-      const wss = new WebSocket('ws://localhost:8082') //({ port: config.port })
-      this.wss = wss
-
-      let socketID = 0 // TODO: Use UUID for this.
-
-      const ws = wss
-      ws._send = ws.send
-      ws.send = socketSendMessage
-
-      wss.on('open', function connection(_ws, req) {
-        // console.log('Connected to:', req.connection.remoteAddress)
-        console.log('Connected to:', config.host)
-        const ws = wss
-
-        socketID++
-        ws._socketID = socketID
-        ws._channels = []
-
-        ws.on('message', onSocketMessage)
-        ws.on('close', unsubscribeSocket)
-        ws.on('pong', heartbeat)
-
-        //ws._send = ws.send
-        //ws.send = socketSendMessage
-        ws.subscribe = subscribeSocket
-        ws.unsubscribe = unsubscribeSocket
-
-        connected() // FIXME: Use Promise instead.
-      })
-    })
+  connect() {
+    return clientSocketConnect.apply(this, arguments)
   }
 
   on() {
@@ -63,7 +30,7 @@ module.exports = class Socket {
   }
 
   send(message) {
-    console.log('Socket sending message:', message)
+    //console.log('Socket sending message:', message)
     // FIXME: Get socketId from message.
 
     //this.wss.send(message)
@@ -160,12 +127,49 @@ function serverSocketListen(config) {
   }, 30 * 1000)
 }
 
+function clientSocketConnect(config) {
+  return new Promise((resolve, reject) => {
+    console.log('Socket connecting on port:', config.port)
+
+    const WebSocket = require('ws') // TODO: this.WS
+    const wss = new WebSocket('ws://localhost:8082') //({ port: config.port })
+    this.wss = wss
+
+    let socketID = 0 // TODO: Use UUID for this.
+
+    const ws = wss
+    ws._send = ws.send
+    ws.send = socketSendMessage
+
+    wss.on('open', function connection(_ws, req) {
+      // console.log('Connected to:', req.connection.remoteAddress)
+      console.log('Connected to:', config.host)
+      const ws = wss
+
+      socketID++
+      ws._socketID = socketID
+      ws._channels = []
+
+      ws.on('message', onSocketMessage)
+      ws.on('close', unsubscribeSocket)
+      ws.on('pong', heartbeat)
+
+      //ws._send = ws.send
+      //ws.send = socketSendMessage
+      ws.subscribe = subscribeSocket
+      ws.unsubscribe = unsubscribeSocket
+
+      resolve()
+    })
+  })
+}
+
 function onSocketMessage(data) {
   try {
     const message = JSON.parse(data)
     message.sid = this._socketID
 
-    console.log('Received:', message)
+    //console.log('Received:', message)
 
     if (!message.event)
       return
@@ -190,7 +194,6 @@ function socketSendMessage(data) {
     const message = JSON.stringify(data)
     if (this.readyState === WebSocket.OPEN) {
       this._send(message)
-      console.log('Message sent')
     }
   } catch (err) {
     console.error(err)

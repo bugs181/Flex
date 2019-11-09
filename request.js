@@ -1,19 +1,19 @@
 'use strict'
 
-// TODO: Rename: request.js
-
 const Transports = require('./transports')
 
 module.exports = {
-  flexClientRequest: flexClientRequest,
+  flexRequest: flexRequest,
   onConnect: flexClientConnected,
   flexClientResponse: flexClientResponse,
+  flexClientCallback: flexClientCallback,
 }
 
-function flexClientRequest(flex, prop, flexProxy) {
+function flexRequest(flex, prop, flexProxy) {
   console.log(`flex(fn: ${prop})`)
 
-  if (!flex.connected)
+  // FIXME: Move to transports file
+  if (!flex.connected) // TODO: if (!flex.listening || !flex.connected)
     flex.connect.call(flex)
 
   // Function returned to client.
@@ -45,13 +45,13 @@ function flexClientRequest(flex, prop, flexProxy) {
     // .then(...)
 
     // Better to use Frame for the chaining..
+    // TODO: Allow the function result to be awaited. Need to put more thought into what the proper return values should be.
 
     return new Proxy(flex, flexProxy) //flex
   }
 }
 
 function flexClientConnected() {
-  console.log('transports.js says were connected')
   processQueue.call(this)
 }
 
@@ -61,13 +61,6 @@ function flexSendRequest(flex, rpcRequest) {
   console.log('rpcRequest:')
   console.log(rpcRequest)
 
-  // TODO: Add request to the queue. Then once connected, go through the queue.
-  // TODO: Transport send()
-  // TODO: Transport in()
-
-  // Simulate an RPC send request + answer; FIXME: Remove after testing
-  //const rpcAnswer = flex.Server.flexServerRequest.call(flex, rpcRequest)
-  //flexClientResponse(flex, rpcAnswer)
   processQueue.call(flex)
 }
 
@@ -82,10 +75,24 @@ function flexClientResponse(flex, rpcAnswer) {
 
     //rpcRequest.callback.resolve.apply(null, rpcAnswer.args)
   }
+
+  flex.processingQueue = false
 }
 
-function flexClientCallback() {
+function flexClientCallback(rpcAnswer) {
+  let rpcCallbacks = this.requests.filter(rpcReq => rpcReq.id === rpcAnswer.id)
 
+  for (let rpcRequest of rpcCallbacks) {
+    const cb = rpcRequest.callbacks.filter(rpcCallback => rpcCallback.index === rpcAnswer.cid)
+    rpcAnswer.args.length = Object.keys(rpcAnswer.args).length
+    const args = Array.from(rpcAnswer.args)
+
+    cb[0].fn.apply(null, args)
+  }
+
+  this.requests[0].status = 'done'
+  if (!this.keepAlive)
+    this.requests.splice(0, 1)
 }
 
 function processQueue() {
@@ -95,11 +102,11 @@ function processQueue() {
     return console.log('processQueue() - Transport not connected yet.')
 
   if (this.processingQueue)
-    return
+    return console.log('Processing queue')
 
   this.processingQueue = true
 
-  const queuedItem = this.requests[0]
+  const queuedItem = this.requests.find(request => request.status !== 'pending' && request.status !== 'done')
 
   // End of queue
   if (!queuedItem) {
@@ -110,7 +117,6 @@ function processQueue() {
 
   queuedItem.status = 'pending'
 
-  //console.log(this)
-  //console.log(this.requests)
   Transports.send.call(this, { event: 'rpcRequest', data: queuedItem })
+  // NOTE: Queued item will get popped off the stack once we have an ACK, to know that the request has been accepted (but maybe not filled); then we move onto next queued item.
 }
